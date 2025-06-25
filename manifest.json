@@ -1,0 +1,9 @@
+{
+  "Name": "Fishing Perfection Helper",
+  "Author": "ForgetfulDoryFish",
+  "Version": "1.0.0",
+  "Description": "Shows fish you can catch right now based on season, time, and weather.",
+  "UniqueID": "ForgetfulDoryFish.FishingPerfectionHelper",
+  "EntryDll": "FishingPerfectionHelper.dll",
+  "MinimumApiVersion": "3.18.0"
+}
