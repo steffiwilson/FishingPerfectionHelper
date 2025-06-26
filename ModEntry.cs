@@ -11,6 +11,86 @@ namespace FishingPerfectionHelper
         private string currentWeather = "";
         private List<FishInfo> unCaughtFish = new();
         private List<FishInfo> fishDatabase = new();
+        private Boolean hasCaughtTutorialFish = false;
+        private Boolean isNightMarketToday = false;
+        private Boolean isCommunityCenterComplete = false;
+        private Boolean hasRustyKey = false;
+
+        private static readonly Dictionary<string, string> knownFishLocations = new()
+        {        //fishid, location
+                { "128", "Ocean" }, // Pufferfish
+                { "129", "Ocean" }, // Anchovy
+                { "130", "Ocean" }, // Tuna
+                { "131", "Ocean" }, // Sardine
+                { "132", "River" }, // Bream
+                { "136", "Mountain Lake" }, // Largemouth Bass
+                { "137", "River, Forest Pond" }, // Smallmouth Bass
+                { "138", "Freshwater" }, // Rainbow Trout
+                { "139", "River, Waterfalls" }, // Salmon
+                { "140", "Freshwater" }, // Walleye
+                { "141", "Freshwater" }, // Perch
+                { "142", "Freshwater" }, // Carp
+                { "143", "River" }, // Catfish
+                { "144", "River, Forest Pond" }, // Pike
+                { "145", "River" }, // Sunfish
+                { "146", "Ocean" }, // Red Mullet
+                { "147", "Ocean" }, // Herring
+                { "148", "Ocean" }, // Eel
+                { "149", "Ocean" }, // Octopus
+                { "150", "Ocean" }, // Red Snapper
+                { "151", "Ocean" }, // Squid
+                { "154", "Ocean" }, // Sea Cucumber
+                { "155", "Ocean" }, // Super Cucumber
+                { "156", "Mines" }, // Ghostfish
+                { "158", "Mines" }, // Stonefish
+                { "159", "Ocean (Legendary)" }, // Crimsonfish
+                { "160", "River (Legendary)" }, // Angler
+                { "161", "Mines" }, // Ice Pip
+                { "162", "Mines" }, // Lava Eel
+                { "163", "Mountain Lake (Legendary)" }, // Legend
+                { "164", "Desert" }, // Sandfish
+                { "165", "Desert" }, // Scorpion Carp
+                { "267", "Ocean" }, // Flounder
+                { "269", "Mountain Lake, Forest Pond" }, // Midnight Carp
+                { "372", "Crab Pot" }, // Clam
+                { "682", "Sewers (Legendary)" }, // Mutant Carp
+                { "698", "Mountain Lake" }, // Sturgeon
+                { "699", "River" }, // Tiger Trout
+                { "700", "Mountain Lake" }, // Bullhead
+                { "701", "Ocean" }, // Tilapia
+                { "702", "Forest River, Mountain Lake" }, // Chub
+                { "704", "Forest River" }, // Dorado
+                { "705", "Ocean" }, // Albacore
+                { "706", "River" }, // Shad
+                { "707", "River, Mountain Lake" }, // Lingcod
+                { "708", "Ocean" }, // Halibut
+                { "715", "Crab Pot" }, // Lobster
+                { "716", "Crab Pot" }, // Crayfish
+                { "717", "Crab Pot" }, // Crab
+                { "718", "Crab Pot" }, // Cockle
+                { "719", "Crab Pot" }, // Mussel
+                { "720", "Crab Pot" }, // Shrimp
+                { "721", "Crab Pot" }, // Snail
+                { "722", "Crab Pot" }, // Periwinkle
+                { "723", "Crab Pot" }, // Oyster
+                { "734", "Secret Woods Pond" }, // Woodskip
+                { "775", "Forest River (Legendary)" }, // Glacierfish
+                { "795", "Witch's Swamp" }, // Void Salmon
+                { "796", "Mutant Bug Lair" }, // Slimejack
+                { "798", "Submarine" }, // Midnight Squid
+                { "799", "Submarine" }, // Spook Fish
+                { "800", "Submarine" }, // Blobfish
+                { "836", "Cove" }, // Stingray
+                { "837", "Island" }, // Lionfish
+                { "838", "Island" }, // Blue Discus
+                { "898", "Ocean (Legendary II)" }, // Son of Crimsonfish
+                { "899", "River (Legendary II)" }, // Ms. Angler
+                { "900", "Mountain Lake (Legendary II)" }, // Legend II
+                { "901", "Sewers (Legendary II)" }, // Radioactive Carp
+                { "902", "Forest River (Legendary II)" }, // Glacierfish Jr.
+                { "Goby", "Waterfalls" } // Goby
+        };
+
 
         public override void Entry(IModHelper helper)
         {
@@ -23,21 +103,12 @@ namespace FishingPerfectionHelper
         {
             UpdateCaughtFish();
 
-            //Monitor.Log("=== you have caught ===", LogLevel.Info);
-            //foreach (var fish in fishDatabase)
-            //{
-            //    if (fish.HasBeenCaught == true)
-            //    {
-            //        Monitor.Log(fish.Name, LogLevel.Info);
-            //        Monitor.Log(fish.Seasons, LogLevel.Info);
-            //    }
-            //}
-            //Monitor.Log("=== you still need ===", LogLevel.Info);
-            //foreach (var fish in unCaughtFish)
-            //{
-            //    Monitor.Log(fish.Name, LogLevel.Info);
-            //    Monitor.Log(fish.Seasons,LogLevel.Info);
-            //}
+            isNightMarketToday = (Game1.currentSeason == "winter" && Game1.dayOfMonth >= 15 && Game1.dayOfMonth <= 17);
+            //pretty sure this isn't right
+            isCommunityCenterComplete = Game1.player.hasCompletedCommunityCenter() || Game1.player.mailReceived.Contains("jojaCompleted");
+            hasRustyKey = Game1.player.mailReceived.Contains("HasRustyKey");
+
+            printFishCaughtStatusToConsole();
         }
 
         private void OnTimeChanged(object? sender, TimeChangedEventArgs e)
@@ -47,7 +118,9 @@ namespace FishingPerfectionHelper
 
             foreach (var fish in unCaughtFish)
             {
-                if (fish.IsCatchable(Game1.currentSeason, currentTime, Game1.isRaining))
+                if (fish.IsCatchable(Game1.currentSeason, currentTime, Game1.isRaining, 
+                    hasCaughtTutorialFish, Game1.player.FishingLevel, isNightMarketToday,
+                    isCommunityCenterComplete))
                 {
                     Monitor.Log($"[Fishing Helper] You can catch: {fish.Name}", LogLevel.Info);
                 }
@@ -90,26 +163,57 @@ namespace FishingPerfectionHelper
                  */
 
                 //be sure it's not a trap fish before attempting to access all these indices
-                //also check that fishId is an int and not "SeaJelly" etc
-                if (rawFish.Split('/')[1] != "trap" && int.TryParse(fishIdStr, out int fishId)) { 
+                //check that fishId is an int and not "SeaJelly" etc
+                if (int.TryParse(fishIdStr, out int fishId)) { 
                     FishInfo currentFish = new();
-                    currentFish.Id = Int32.Parse(fishIdStr);
                     //the key used to reference the fish in .fishCaught is (0)XXX where XXX is the fishid
                     currentFish.Key = $"(O){fishIdStr}";
                     currentFish.Name = rawFish.Split('/')[0];
-                    string seasonsString = rawFish.Split('/')[6];
-                    foreach (var season in seasonsString.Split(' ')) {
-                        currentFish.Seasons.Add(season);
-                    }
-                    string TimeString = rawFish.Split('/')[5];
-                    int startTime = Int32.Parse(TimeString.Split(' ')[0]);
-                    int endTime = Int32.Parse(TimeString.Split(' ')[1]);
-                    currentFish.Times = GetTimeRange(startTime, endTime);
-                    currentFish.Weather = rawFish.Split('/')[4];
-                    currentFish.Location = "todo";
-                    currentFish.MinFishingLevel = Int32.Parse(rawFish.Split('/')[12]);
-                    currentFish.HasBeenCaught = null;
+                    currentFish.Id = Int32.Parse(fishIdStr);
 
+                    //location
+                    knownFishLocations.TryGetValue(fishIdStr, out string location);
+                    if (location == null || location == "")
+                        location = "Unknown";
+                    currentFish.Locations = location;
+
+                    if (rawFish.Split('/')[1] != "trap")
+                    {   //crab pot fish don't have season/weather/level requirements or indices
+                        currentFish.Seasons.Add("spring");
+                        currentFish.Seasons.Add("summer");
+                        currentFish.Seasons.Add("fall");
+                        currentFish.Seasons.Add("winter");
+                        currentFish.Times = GetTimeRange(600, 2600);
+                        currentFish.Weather = "both";
+                        currentFish.MinFishingLevel = 0;
+                        currentFish.canBeTutorialFish = false;
+                    }
+                    else
+                    {
+                        //seasons
+                        string seasonsString = rawFish.Split('/')[6];
+                        foreach (var season in seasonsString.Split(' '))
+                        {
+                            currentFish.Seasons.Add(season);
+                        }
+
+                        //times
+                        string TimeString = rawFish.Split('/')[5];
+                        int startTime = Int32.Parse(TimeString.Split(' ')[0]);
+                        int endTime = Int32.Parse(TimeString.Split(' ')[1]);
+                        currentFish.Times = GetTimeRange(startTime, endTime);
+
+                        //weather
+                        currentFish.Weather = rawFish.Split('/')[4];
+
+                        //fishing level
+                        currentFish.MinFishingLevel = Int32.Parse(rawFish.Split('/')[12]);
+
+                        //tutorial fish
+                        currentFish.canBeTutorialFish = Boolean.Parse(rawFish.Split('/')[13]);
+                    }
+
+                    currentFish.HasBeenCaught = null;
                     fishDatabase.Add(currentFish);
                 }
             }
@@ -126,6 +230,8 @@ namespace FishingPerfectionHelper
                     if (numberCaught > 0)
                     {
                         fish.HasBeenCaught = true;
+                        if (!hasCaughtTutorialFish)
+                            hasCaughtTutorialFish = true;
                         continue;
                     }
                 }
@@ -134,5 +240,24 @@ namespace FishingPerfectionHelper
                 unCaughtFish.Add(fish);
             }
         }//end UpdateCaughtFish
-    }
-}
+
+        private void printFishCaughtStatusToConsole()
+        {
+            Monitor.Log("=== you have caught ===", LogLevel.Info);
+            foreach (var fish in fishDatabase)
+            {
+                if (fish.HasBeenCaught == true)
+                {
+                    Monitor.Log(fish.Name, LogLevel.Info);
+                    Monitor.Log($"it can be caught at: {fish.Locations}", LogLevel.Info);
+                }
+            }
+            Monitor.Log("=== you still need ===", LogLevel.Info);
+            foreach (var fish in unCaughtFish)
+            {
+                Monitor.Log(fish.Name, LogLevel.Info);
+                Monitor.Log($"it can be caught at: {fish.Locations}", LogLevel.Info);
+            }
+        }
+    }//end Mod
+}//end Namespace
