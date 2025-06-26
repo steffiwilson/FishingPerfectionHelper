@@ -1,1 +1,1 @@
-This is still a work in progress!
+This is still a work in progress! Currently it's just outputting to the console and I'm still working out details for the fish locations and conditions (like not showing night market fish as catchable except during the night market, not showing Island fish as catchable before cc completion, etc). Eventually the goal is to have it output somewhere visible in the UI (it will probably just be a text overlay). 
