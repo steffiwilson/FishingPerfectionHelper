@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using StardewValley;
+using System.Collections.Generic;
 
 namespace FishingPerfectionHelper
 {
@@ -17,20 +18,30 @@ namespace FishingPerfectionHelper
 
         public FishInfo() { }
 
-        public bool IsCatchable(string currentSeason, int currentTime, bool isRaining,
-            bool hasCaughtTutorialFish, int fishingLevel, bool isNightMarket, bool communityCenterComplete)
+        public bool IsCatchable(bool hasCaughtTutorialFish, bool isNightMarket, bool communityCenterComplete,
+            bool busUnlocked)
         {
-            //weather for fish can be "sunny" "rainy" or "both"
-            return Seasons.Contains(currentSeason.ToLower())
+            string currentSeason = Game1.currentSeason;
+            int currentTime = Game1.timeOfDay;
+            bool isRaining = Game1.isRaining;
+            int fishingLevel = Game1.player.FishingLevel;
+            bool legendaryIIActive = Game1.player.team.SpecialOrderRuleActive("LEGENDARY_FAMILY");
+            bool hasRustyKey = Game1.player.mailReceived.Contains("HasRustyKey");
+            bool hasSkullKey = Game1.player.mailReceived.Contains("HasSkullKey");
+
+            return (Seasons.Contains(currentSeason.ToLower())
                 && Times.Contains(currentTime)
                 && ((isRaining == true && Weather != "sunny") || (isRaining == false && Weather != "rainy"))
                 && (hasCaughtTutorialFish || canBeTutorialFish)
                 && (MinFishingLevel <= fishingLevel)
                 && (Locations != "Submarine" || isNightMarket)
-                && ((Locations != "Witch's Swamp" && Locations != "Island") || communityCenterComplete)
+                && ((Locations != "Witch's Swamp" && Locations != "Island" && Locations != "Cove") || communityCenterComplete)
+                && (!Locations.Contains("Sewer") || hasRustyKey)
+                && (Locations != "Mines" || hasSkullKey) //mine fish definitely good after bottom reached
+                && (Locations != "Desert" || busUnlocked))
+                || (Locations.Contains("Legendary II") && legendaryIIActive) //show legendary II fish if quest active
             ;
-
-            //todo: filter out qi challenge fish (unless quest active)
+            //     todo: test legendary fish seasons?
 
         }
     }

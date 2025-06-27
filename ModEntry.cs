@@ -15,6 +15,9 @@ namespace FishingPerfectionHelper
         private Boolean isNightMarketToday = false;
         private Boolean isCommunityCenterComplete = false;
         private Boolean hasRustyKey = false;
+        private Boolean hasSkullKey = false;
+        private Boolean isBusUnlocked = false;
+        private Boolean hasExtendedFamilyQuest = false;
 
         private static readonly Dictionary<string, string> knownFishLocations = new()
         {        //fishid, location
@@ -104,25 +107,27 @@ namespace FishingPerfectionHelper
             UpdateCaughtFish();
 
             isNightMarketToday = (Game1.currentSeason == "winter" && Game1.dayOfMonth >= 15 && Game1.dayOfMonth <= 17);
-            //pretty sure this isn't right
-            isCommunityCenterComplete = Game1.player.hasCompletedCommunityCenter() || Game1.player.mailReceived.Contains("jojaCompleted");
-            hasRustyKey = Game1.player.mailReceived.Contains("HasRustyKey");
+            isCommunityCenterComplete = Game1.player.hasCompletedCommunityCenter() ||
+                                            (Game1.player.mailReceived.Contains("jojaBoilerRoom")
+                                            && Game1.player.mailReceived.Contains("jojaCraftsRoom")
+                                            && Game1.player.mailReceived.Contains("jojaFishTank")
+                                            && Game1.player.mailReceived.Contains("jojaPantry")
+                                            && Game1.player.mailReceived.Contains("jojaVault"));
+            
+            isBusUnlocked = Game1.player.mailReceived.Contains("ccVault") || Game1.player.mailReceived.Contains("jojaVault");
 
-            printFishCaughtStatusToConsole();
+            //printFishCaughtStatusToConsole();
         }
 
         private void OnTimeChanged(object? sender, TimeChangedEventArgs e)
         {
-            int currentTime = Game1.timeOfDay;
             var caught = Game1.stats.FishCaught;
 
             foreach (var fish in unCaughtFish)
             {
-                if (fish.IsCatchable(Game1.currentSeason, currentTime, Game1.isRaining, 
-                    hasCaughtTutorialFish, Game1.player.FishingLevel, isNightMarketToday,
-                    isCommunityCenterComplete))
+                if (fish.IsCatchable(hasCaughtTutorialFish, isNightMarketToday, isCommunityCenterComplete, isBusUnlocked))
                 {
-                    Monitor.Log($"[Fishing Helper] You can catch: {fish.Name}", LogLevel.Info);
+                    Monitor.Log($"[Fishing Helper] You can catch: {fish.Name} at {fish.Locations} in {fish.Weather} conditions", LogLevel.Info);
                 }
             }
 
@@ -177,7 +182,7 @@ namespace FishingPerfectionHelper
                         location = "Unknown";
                     currentFish.Locations = location;
 
-                    if (rawFish.Split('/')[1] != "trap")
+                    if (rawFish.Split('/')[1] == "trap")
                     {   //crab pot fish don't have season/weather/level requirements or indices
                         currentFish.Seasons.Add("spring");
                         currentFish.Seasons.Add("summer");
@@ -204,7 +209,7 @@ namespace FishingPerfectionHelper
                         currentFish.Times = GetTimeRange(startTime, endTime);
 
                         //weather
-                        currentFish.Weather = rawFish.Split('/')[4];
+                        currentFish.Weather = rawFish.Split('/')[7];
 
                         //fishing level
                         currentFish.MinFishingLevel = Int32.Parse(rawFish.Split('/')[12]);
@@ -249,14 +254,14 @@ namespace FishingPerfectionHelper
                 if (fish.HasBeenCaught == true)
                 {
                     Monitor.Log(fish.Name, LogLevel.Info);
-                    Monitor.Log($"it can be caught at: {fish.Locations}", LogLevel.Info);
+                    Monitor.Log($"it can be caught at: {fish.Locations} in {fish.Weather} conditions", LogLevel.Info);
                 }
             }
             Monitor.Log("=== you still need ===", LogLevel.Info);
             foreach (var fish in unCaughtFish)
             {
                 Monitor.Log(fish.Name, LogLevel.Info);
-                Monitor.Log($"it can be caught at: {fish.Locations}", LogLevel.Info);
+                Monitor.Log($"it can be caught at: {fish.Locations} in {fish.Weather} conditions", LogLevel.Info);
             }
         }
     }//end Mod
