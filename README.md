@@ -1,1 +1,1 @@
-This is still a work in progress! Still needs further testing to be sure fish catchability conditions are right, and still needs output to the UI (currently just outputs to the console)
+This is in final testing stages now. Probably does not support fish from expansion mods (as I have been told they may not appear in Data/Fish but only Data/Locations). 
