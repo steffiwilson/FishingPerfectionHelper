@@ -15,6 +15,7 @@ namespace FishingPerfectionHelper
         public int MinFishingLevel { get; set; }
         public Boolean canBeTutorialFish { get; set; }
         public Boolean? HasBeenCaught { get; set; }
+        public int Difficulty { get; set; }
 
         public FishInfo() { }
 
@@ -29,20 +30,20 @@ namespace FishingPerfectionHelper
             bool hasRustyKey = Game1.player.mailReceived.Contains("HasRustyKey");
             bool hasSkullKey = Game1.player.mailReceived.Contains("HasSkullKey");
 
-            return (Seasons.Contains(currentSeason.ToLower())
+            return ((Seasons.Contains(currentSeason.ToLower())
                 && Times.Contains(currentTime)
                 && ((isRaining == true && Weather != "sunny") || (isRaining == false && Weather != "rainy"))
                 && (hasCaughtTutorialFish || canBeTutorialFish)
                 && (MinFishingLevel <= fishingLevel)
-                && (Locations != "Submarine" || isNightMarket)
+                && (Locations != "Submarine" || (isNightMarket && currentTime > 1700))
                 && ((Locations != "Witch's Swamp" && Locations != "Island" && Locations != "Cove") || communityCenterComplete)
                 && (!Locations.Contains("Sewer") || hasRustyKey)
-                && (Locations != "Mines" || hasSkullKey) //mine fish definitely good after bottom reached
-                && (Locations != "Desert" || busUnlocked))
-                || (Locations.Contains("Legendary II") && legendaryIIActive) //show legendary II fish if quest active
+                && (Locations != "Mutant Bug Lair" || (hasRustyKey && communityCenterComplete))
+                && (Locations != "Mines" || hasSkullKey) //mine fish definitely catchable after bottom reached (I don't want to have to hard-code the others by level)
+                && (Locations != "Desert" || busUnlocked)
+                && (Locations.Contains("Legendary II") == false)) //don't show Legendary II fish even if other conditions met
+                || (Locations.Contains("Legendary II") && legendaryIIActive)) //...just show them if the quest is active
             ;
-            //     todo: test legendary fish seasons?
-
         }
     }
 }

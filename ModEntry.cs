@@ -2,22 +2,25 @@
 using StardewModdingAPI.Events;
 using StardewValley;
 using System.Collections.Specialized;
+using StardewModdingAPI.Utilities;
+using StardewValley.Menus;
+using GenericModConfigMenu;
+using System.Xml;
 
 namespace FishingPerfectionHelper
 {
     public class ModEntry : Mod
     {
-        private string currentSeason = "";
-        private string currentWeather = "";
+        private List<FishInfo> catchableFish = new();
         private List<FishInfo> unCaughtFish = new();
         private List<FishInfo> fishDatabase = new();
         private Boolean hasCaughtTutorialFish = false;
         private Boolean isNightMarketToday = false;
         private Boolean isCommunityCenterComplete = false;
-        private Boolean hasRustyKey = false;
-        private Boolean hasSkullKey = false;
         private Boolean isBusUnlocked = false;
-        private Boolean hasExtendedFamilyQuest = false;
+        private ModConfig config;
+
+        //todo new keybind for triggering update of caught fish
 
         private static readonly Dictionary<string, string> knownFishLocations = new()
         {        //fishid, location
@@ -92,14 +95,39 @@ namespace FishingPerfectionHelper
                 { "901", "Sewers (Legendary II)" }, // Radioactive Carp
                 { "902", "Forest River (Legendary II)" }, // Glacierfish Jr.
                 { "Goby", "Waterfalls" } // Goby
-        };
-
+        };       
 
         public override void Entry(IModHelper helper)
         {
             populateFishDatabase();
+            config = helper.ReadConfig<ModConfig>();
+            helper.Events.GameLoop.GameLaunched += OnGameLaunched;
             helper.Events.GameLoop.DayStarted += OnDayStarted;
-            helper.Events.GameLoop.TimeChanged += OnTimeChanged;
+            helper.Events.Input.ButtonPressed += OnButtonPressed;            
+        }
+
+        private void OnButtonPressed(object? sender, ButtonPressedEventArgs e)
+        {
+            if (!Context.IsWorldReady)
+                return;
+
+            if (!Context.IsPlayerFree) 
+                return;
+
+            if (e.Button == config.ViewAvailableFish) 
+            {
+                UpdateCatchableFish();
+                Game1.exitActiveMenu(); // Ensure no menu is open
+                string message = BuildCatchableFishListForDisplay(catchableFish);
+                Game1.drawLetterMessage(message);
+            }
+
+            if (e.Button == config.RefreshCaughtFish)
+            {
+                populateFishDatabase();
+                UpdateCaughtFish();
+                Game1.drawObjectDialogue("Refreshed your caught fish; re-open Fishing Perfection Helper to see an updated list of needed fish");
+            }
         }
 
         private void OnDayStarted(object? sender, DayStartedEventArgs e)
@@ -116,35 +144,56 @@ namespace FishingPerfectionHelper
             
             isBusUnlocked = Game1.player.mailReceived.Contains("ccVault") || Game1.player.mailReceived.Contains("jojaVault");
 
-            //printFishCaughtStatusToConsole();
+            //debug_printFishCaughtStatusToConsole();
         }
 
-        private void OnTimeChanged(object? sender, TimeChangedEventArgs e)
+        private void OnGameLaunched(object sender, GameLaunchedEventArgs e)
         {
-            var caught = Game1.stats.FishCaught;
+            // get Generic Mod Config Menu's API (if it's installed)
+            var configMenu = this.Helper.ModRegistry.GetApi<IGenericModConfigMenuApi>("spacechase0.GenericModConfigMenu");
+            if (configMenu is null)
+                return;
 
-            foreach (var fish in unCaughtFish)
-            {
-                if (fish.IsCatchable(hasCaughtTutorialFish, isNightMarketToday, isCommunityCenterComplete, isBusUnlocked))
-                {
-                    Monitor.Log($"[Fishing Helper] You can catch: {fish.Name} at {fish.Locations} in {fish.Weather} conditions", LogLevel.Info);
-                }
-            }
+            // register mod
+            configMenu.Register(
+                mod: this.ModManifest,
+                reset: () => this.config = new ModConfig(),
+                save: () => this.Helper.WriteConfig(this.config)
+            );
 
-            Monitor.Log($"[Fishing Helper] Time: {e.NewTime}", LogLevel.Info);
+            configMenu.AddKeybind(
+                mod: this.ModManifest,
+                getValue: () => this.config.ViewAvailableFish,
+                setValue: value => this.config.ViewAvailableFish = value,
+                name: () => "View available fish",
+                tooltip: () => "Opens the list of fish that can be caught currently. Automatically hides fish that are unavailable due to locked areas or requirements such as fishing level.",
+                fieldId: null
+            );
+
+            configMenu.AddKeybind(
+                mod: this.ModManifest,
+                getValue: () => this.config.RefreshCaughtFish,
+                setValue: value => this.config.RefreshCaughtFish = value,
+                name: () => "Refresh caught fish",
+                tooltip: () => "Rechecks fish you have caught, so your available fish list can filter out ones caught today",
+                fieldId: null
+            );
         }
 
         private static List<int> GetTimeRange(int start, int end)
         {
-            //todo make sure end time is exclusive
+            //we need all times in the range even though fish catchability only has hour precision
+            //note that the end time is excluded
             List<int> times = new();
-            for (int t = start; t <= end; t += 10)
+            for (int t = start; t < end; t += 10)
                 times.Add(t);
             return times;
         }
 
         private void populateFishDatabase()
         {
+            fishDatabase.Clear();
+
             //get the fish dictionary, keys of their ids are strings
             var fishDic = Game1.content.Load<Dictionary<string, string>>("Data/Fish");
 
@@ -167,7 +216,6 @@ namespace FishingPerfectionHelper
                  * 13 - can be caught as tutorial fish
                  */
 
-                //be sure it's not a trap fish before attempting to access all these indices
                 //check that fishId is an int and not "SeaJelly" etc
                 if (int.TryParse(fishIdStr, out int fishId)) { 
                     FishInfo currentFish = new();
@@ -176,14 +224,14 @@ namespace FishingPerfectionHelper
                     currentFish.Name = rawFish.Split('/')[0];
                     currentFish.Id = Int32.Parse(fishIdStr);
 
-                    //location
+                    //location (hard-coded, sorry D: )
                     knownFishLocations.TryGetValue(fishIdStr, out string location);
                     if (location == null || location == "")
                         location = "Unknown";
                     currentFish.Locations = location;
 
                     if (rawFish.Split('/')[1] == "trap")
-                    {   //crab pot fish don't have season/weather/level requirements or indices
+                    {   //crab pot fish don't have season/weather/level requirements (or indices)
                         currentFish.Seasons.Add("spring");
                         currentFish.Seasons.Add("summer");
                         currentFish.Seasons.Add("fall");
@@ -192,6 +240,7 @@ namespace FishingPerfectionHelper
                         currentFish.Weather = "both";
                         currentFish.MinFishingLevel = 0;
                         currentFish.canBeTutorialFish = false;
+                        currentFish.Difficulty = 0;
                     }
                     else
                     {
@@ -216,6 +265,8 @@ namespace FishingPerfectionHelper
 
                         //tutorial fish
                         currentFish.canBeTutorialFish = Boolean.Parse(rawFish.Split('/')[13]);
+
+                        currentFish.Difficulty = Int32.Parse(rawFish.Split('/')[1]);
                     }
 
                     currentFish.HasBeenCaught = null;
@@ -231,6 +282,7 @@ namespace FishingPerfectionHelper
             {
                 if (Game1.player.fishCaught.TryGetValue(fish.Key, out var catchData) && catchData.Length > 0)
                 {
+                    // I suspect that the TryGetValue() fails for uncaught fish so we're only here if it has been caught...
                     int numberCaught = catchData[0];
                     if (numberCaught > 0)
                     {
@@ -241,12 +293,63 @@ namespace FishingPerfectionHelper
                     }
                 }
 
-                // If not caught or count is 0
+                // If not caught (or count was 0)
                 unCaughtFish.Add(fish);
             }
         }//end UpdateCaughtFish
 
-        private void printFishCaughtStatusToConsole()
+        private void UpdateCatchableFish()
+        {
+            var caught = Game1.stats.FishCaught;
+            catchableFish.Clear();
+
+            foreach (var fish in unCaughtFish)
+            {
+                //IsCatchable checks time, season, weather, fishing level, area unlocks, and quest conditions
+                if (fish.IsCatchable(hasCaughtTutorialFish, isNightMarketToday, isCommunityCenterComplete, isBusUnlocked))
+                {
+                    catchableFish.Add(fish);
+                }
+            }
+        }
+
+        public string BuildCatchableFishListForDisplay(List<FishInfo> catchableFish)
+        {
+            string message = //line breaks as they display in the 52-character monospace window in-game
+            "These are the fish that you haven't caught before   " +
+            "today that you should be able to catch under the    " +
+            "current season, conditions, and time:               " +
+            "                                                    ";
+            catchableFish = catchableFish.OrderBy(f => f.Difficulty).ToList();
+            foreach (var fish in catchableFish)
+            {
+                string weather = fish.Weather;
+                if (weather == "both")
+                {
+                    weather = "any";
+                }
+
+                string thisFish = ($"> {fish.Name} ({fish.Locations}) - {weather} weather");
+
+                //truncate if too long soz
+                if (thisFish.Length > 52)
+                    thisFish = thisFish.Substring(0, 52);
+
+                while (thisFish.Length < 52)
+                {
+                    thisFish += " "; //append spaces until it fills the line lol
+                }
+                
+
+                message += thisFish;
+
+            }
+
+            return message;
+
+        }
+
+        private void debug_printFishCaughtStatusToConsole()
         {
             Monitor.Log("=== you have caught ===", LogLevel.Info);
             foreach (var fish in fishDatabase)
