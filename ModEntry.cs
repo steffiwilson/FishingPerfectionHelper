@@ -11,13 +11,10 @@ namespace FishingPerfectionHelper
 {
     public class ModEntry : Mod
     {
-        private List<FishInfo> catchableFish = new();
-        private List<FishInfo> unCaughtFish = new();
-        private List<FishInfo> fishDatabase = new();
+        private List<Fish> catchableFish = new();
+        private List<Fish> unCaughtFish = new();
+        public List<Fish> fishDatabase = new();
         private Boolean hasCaughtTutorialFish = false;
-        private Boolean isNightMarketToday = false;
-        private Boolean isCommunityCenterComplete = false;
-        private Boolean isBusUnlocked = false;
         private ModConfig config;
 
         private static readonly Dictionary<string, string> knownFishLocations = new()
@@ -116,30 +113,25 @@ namespace FishingPerfectionHelper
 
             if (e.Button == config.ViewAvailableFish) 
             {
-                UpdateCaughtFish(); //recheck uncaught fish in the db to see if they're caught now
-                UpdateCatchableFish(); //recheck uncaughtfish to find which are currently catchable
+                fishDatabase = FishDataLoader.UpdateCaughtFishInDatabase(fishDatabase);
+                if (!hasCaughtTutorialFish && fishDatabase.Any(f => f.HasBeenCaught == true))
+                {
+                    hasCaughtTutorialFish = true;
+                }
+                unCaughtFish = fishDatabase.Where(f => f.HasBeenCaught != true).ToList();
+                catchableFish = FishDataLoader.GetCurrentlyCatchableFish(unCaughtFish, hasCaughtTutorialFish); 
                 Game1.exitActiveMenu(); // Ensure no menu is open
-                string message = BuildCatchableFishListForDisplay(catchableFish);
+                string message = Utilities.BuildCatchableFishListForDisplay(catchableFish);
                 Game1.drawLetterMessage(message);
             }
         }
 
         private void OnDayStarted(object? sender, DayStartedEventArgs e)
         {
-            //need to repopulate on day start to be sure we have this player's fish caught flagged and not a cache from another loaded save
-            populateFishDatabase();
-
-            isNightMarketToday = (Game1.currentSeason == "winter" && Game1.dayOfMonth >= 15 && Game1.dayOfMonth <= 17);
-            isCommunityCenterComplete = Game1.player.hasCompletedCommunityCenter() ||
-                                            (Game1.player.mailReceived.Contains("jojaBoilerRoom")
-                                            && Game1.player.mailReceived.Contains("jojaCraftsRoom")
-                                            && Game1.player.mailReceived.Contains("jojaFishTank")
-                                            && Game1.player.mailReceived.Contains("jojaPantry")
-                                            && Game1.player.mailReceived.Contains("jojaVault"));
-            
-            isBusUnlocked = Game1.player.mailReceived.Contains("ccVault") || Game1.player.mailReceived.Contains("jojaVault");
-
-            debug_printFishCaughtStatusToConsole();
+            //need to repopulate on day start, because if the player loads a different save
+            //the previous save's database with its markers for caught fish will still be in scope
+            //calling this fresh each day ensures accuracy
+            FishDataLoader.populateFishDatabase(fishDatabase, knownFishLocations);
         }
 
         private void OnGameLaunched(object sender, GameLaunchedEventArgs e)
@@ -166,226 +158,10 @@ namespace FishingPerfectionHelper
             );
         }
 
-        private static List<int> GetTimeRange(int start, int end)
+        private void debug_printFishCaughtStatusToConsole(List<Fish> fishDatabase)
         {
-            //we need all times in the range even though fish catchability only has hour precision
-            //note that the end time is excluded
-            List<int> times = new();
-            for (int t = start; t < end; t += 10)
-                times.Add(t);
-            return times;
-        }
-
-        private void populateFishDatabase()
-        {
-            //reset the List<FishInfo> fishDatabase, with which ones are already caught
-            //we redo this at the start of each day
-            fishDatabase.Clear();
-
-            //get the fish dictionary, keys of their ids are strings
-            var fishDic = Game1.content.Load<Dictionary<string, string>>("Data/Fish");
-
-            //iterate the keys in the dictionary to get their details
-            foreach (var fishIdStr in fishDic.Keys)
-            {
-                fishDic.TryGetValue(fishIdStr, out string rawFish);
-                Monitor.Log(rawFish, LogLevel.Info);
-                /* example output of rawFish:
-                 * Pufferfish/80/floater/1/36/1200 1600/summer/sunny/690 .4 685 .1/4/.3/.5/0/true
-                 * access from .Split as an array, with the indices as follows:
-                 * https://stardewvalleywiki.com/Modding:Fish_data
-                 * 0 - name
-                 * 1,2,3,4 - difficulty, movement style, minimum size, maximum size
-                 * 5 - begin and end times for availability (end is exclusive, start is inclusive)
-                 * 6 - seasons (space separated string)
-                 * 7 - weather (will be "sunny" "rainy" or "both")
-                 * 8 - purportedly this is the location
-                 * 9, 10, 11 - related to the chance to catch it, including cast length
-                 * 12 - minimum fishing level required
-                 * 13 - can be caught as tutorial fish
-                 */
-
-                //check that fishId is an int and not "SeaJelly" etc
-                if (int.TryParse(fishIdStr, out int fishId)) { 
-                    FishInfo currentFish = new();
-                    //the key used to reference the fish in .fishCaught is (0)XXX where XXX is the fishid
-                    currentFish.Key = $"(O){fishIdStr}";
-                    currentFish.Name = rawFish.Split('/')[0];
-                    currentFish.Id = Int32.Parse(fishIdStr);
-
-                    //location (hard-coded, sorry D: )
-                    knownFishLocations.TryGetValue(fishIdStr, out string location);
-                    if (location == null || location == "")
-                        location = "Unknown";
-                    currentFish.Locations = location;
-
-                    if (rawFish.Split('/')[1] == "trap")
-                    {   //crab pot fish don't have season/weather/level requirements (or indices)
-                        currentFish.Seasons.Add("spring");
-                        currentFish.Seasons.Add("summer");
-                        currentFish.Seasons.Add("fall");
-                        currentFish.Seasons.Add("winter");
-                        currentFish.Times = GetTimeRange(600, 2600);
-                        currentFish.Weather = "both";
-                        currentFish.MinFishingLevel = 0;
-                        currentFish.canBeTutorialFish = false;
-                        currentFish.Difficulty = 0;
-                    }
-                    else
-                    {
-                        //seasons
-                        string seasonsString = rawFish.Split('/')[6];
-                        foreach (var season in seasonsString.Split(' '))
-                        {
-                            currentFish.Seasons.Add(season);
-                        }
-
-                        //times
-                        string TimeString = rawFish.Split('/')[5];
-                        int startTime = Int32.Parse(TimeString.Split(' ')[0]);
-                        int endTime = Int32.Parse(TimeString.Split(' ')[1]);
-                        currentFish.Times = GetTimeRange(startTime, endTime);
-
-                        //weather
-                        currentFish.Weather = rawFish.Split('/')[7];
-
-                        //fishing level
-                        currentFish.MinFishingLevel = Int32.Parse(rawFish.Split('/')[12]);
-
-                        //tutorial fish
-                        currentFish.canBeTutorialFish = Boolean.Parse(rawFish.Split('/')[13]);
-
-                        currentFish.Difficulty = Int32.Parse(rawFish.Split('/')[1]);
-                    }
-
-                    currentFish.HasBeenCaught = false; //initialize it as uncaught
-
-                    //fix bug in the Data/Fish record for the Angler saying it's all-season
-                    if (currentFish.Id == 160)
-                    {
-                        currentFish.Seasons = new List<string> { "Fall" };
-                    }
-
-                    fishDatabase.Add(currentFish);
-                }
-            }
-        }
-
-        private void UpdateCaughtFish()
-        {
-            //check which fish not marked as caught in the fishDatabase are actually caught
-            //we do this each time the player opens the view (first time per day it will check all fish,
-            //then subsequent times it will just recheck the ones that weren't caught at the start of
-            //the day (efficiency!))
-            unCaughtFish.Clear();
-            foreach (var fish in fishDatabase.Where(f => f.HasBeenCaught != true))
-            {
-                if (Game1.player.fishCaught.TryGetValue(fish.Key, out var catchData) && catchData.Length > 0)
-                {
-                    // I suspect that the TryGetValue() fails for uncaught fish so we're only here if it has been caught...
-                    int numberCaught = catchData[0];
-                    if (numberCaught > 0)
-                    {
-                        fish.HasBeenCaught = true;
-                        if (!hasCaughtTutorialFish)
-                            hasCaughtTutorialFish = true;
-                        continue;
-                    }
-                }
-
-                // If not caught (or count was 0)
-                unCaughtFish.Add(fish);
-            }
-        }
-
-        private void UpdateCatchableFish()
-        {
-            //check which fish that haven't been caught yet are catchable under current game state
-
-            catchableFish.Clear();
-
-            foreach (var fish in unCaughtFish)
-            {
-                //IsCatchable checks time, season, weather, fishing level, area unlocks, and quest conditions
-                if (fish.IsCatchable(hasCaughtTutorialFish, isNightMarketToday, isCommunityCenterComplete, isBusUnlocked))
-                {
-                    catchableFish.Add(fish);
-                }
-            }
-        }
-
-        public string BuildCatchableFishListForDisplay(List<FishInfo> catchableFish)
-        {
-            string message = //line breaks as they display in the 52?-character monospace window in-game
-            "These are the fish that you haven't caught yet     " +
-            "that you should be able to catch under the current " +
-            "season, conditions, and time:                      " +
-            "                                                     ";
-
-            int lineCount = 4;
-            catchableFish = catchableFish.OrderBy(f => f.Difficulty).ToList();
-            foreach (var fish in catchableFish)
-            {
-                //the pagination is weird ok, each page seems to have a different length
-                //available for line 1 so I'm hard-coding those lines at just the right
-                //size with the spaces (idk what i'm doing)
-                switch (lineCount)
-                {
-                    case 11:
-                        message += "Page 2...                                      ";
-                        break;
-                    case 22:
-                        message += "Page 3...                                     ";
-                        break;
-                    case 33:
-                        message += "Page 4...                                       ";
-                        break;
-                    case 44:
-                        message += "Page 5...                                        ";
-                        break;
-                    case 55:
-                        message += "Page 6...                                         ";
-                        break;
-                    case 66:
-                        message += "Page 7...                                      ";
-                        break;
-                    case 77: //this is enough for all fish in 1.6
-                        message += "Page 8...                                       ";
-                        break;
-                    default: //not a first line on a page, so just build a fish info line
-                        //limit what we display bc of the ~50 char limit which runs out easily
-                        string rain = "";
-                        if (fish.Weather == "rainy")
-                        {
-                            rain = " - rain";
-                        }
-
-                        string thisFish = ($"> {fish.Name} ({fish.Locations}){rain}");
-                        // eg '> Pufferfish (Ocean)' or '> Walleye (Freshwater) - rain'
-
-                        //truncate (sorry) if somehow too long 
-                        if (thisFish.Length > 52)
-                            thisFish = thisFish.Substring(0, 50);
-
-                        while (thisFish.Length < 52)
-                        {
-                            thisFish += " "; //append spaces until it fills the line lol what could possibly go wrong
-                        }
-
-                        message += thisFish;
-                        break;
-                } //end switch
-                lineCount++;
-            } //end foreach
-
-            return message;
-
-        }
-
-        private void debug_printFishCaughtStatusToConsole()
-        {
-            UpdateCaughtFish();
-            UpdateCatchableFish();
+            //refresh the caught fish before printing...
+            fishDatabase = FishDataLoader.UpdateCaughtFishInDatabase(fishDatabase);
 
             Monitor.Log("..........................................................", LogLevel.Info);
             Monitor.Log("============= you have caught =============", LogLevel.Info);
@@ -398,10 +174,13 @@ namespace FishingPerfectionHelper
                 }
             }
             Monitor.Log("============= you still need =============", LogLevel.Info);
-            foreach (var fish in unCaughtFish)
+            foreach (var fish in fishDatabase)
             {
-                Monitor.Log(fish.Name, LogLevel.Info);
-                Monitor.Log($"it can be caught at: {fish.Locations} in {fish.Weather} conditions", LogLevel.Info);
+                if (fish.HasBeenCaught != true)
+                {
+                    Monitor.Log(fish.Name, LogLevel.Info);
+                    Monitor.Log($"it can be caught at: {fish.Locations} in {fish.Weather} conditions", LogLevel.Info);
+                }
             }
             Monitor.Log("..........................................................", LogLevel.Info);
         }
