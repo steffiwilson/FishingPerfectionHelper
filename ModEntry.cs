@@ -189,6 +189,7 @@ namespace FishingPerfectionHelper
             foreach (var fishIdStr in fishDic.Keys)
             {
                 fishDic.TryGetValue(fishIdStr, out string rawFish);
+                Monitor.Log(rawFish, LogLevel.Info);
                 /* example output of rawFish:
                  * Pufferfish/80/floater/1/36/1200 1600/summer/sunny/690 .4 685 .1/4/.3/.5/0/true
                  * access from .Split as an array, with the indices as follows:
@@ -258,6 +259,13 @@ namespace FishingPerfectionHelper
                     }
 
                     currentFish.HasBeenCaught = false; //initialize it as uncaught
+
+                    //fix bug in the Data/Fish record for the Angler saying it's all-season
+                    if (currentFish.Id == 160)
+                    {
+                        currentFish.Seasons = new List<string> { "Fall" };
+                    }
+
                     fishDatabase.Add(currentFish);
                 }
             }
