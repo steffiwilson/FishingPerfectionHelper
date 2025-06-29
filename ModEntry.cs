@@ -43,9 +43,12 @@ namespace FishingPerfectionHelper
                 { "149", "Ocean" }, // Octopus
                 { "150", "Ocean" }, // Red Snapper
                 { "151", "Ocean" }, // Squid
+                { "152", "Ocean" }, // Seaweed
+                { "153", "Freshwater" }, // Green algae
                 { "154", "Ocean" }, // Sea Cucumber
                 { "155", "Ocean" }, // Super Cucumber
                 { "156", "Mines" }, // Ghostfish
+                { "157", "Mines" }, // White Algae
                 { "158", "Mines" }, // Stonefish
                 { "159", "Ocean (Legendary)" }, // Crimsonfish
                 { "160", "River (Legendary)" }, // Angler
