@@ -20,8 +20,6 @@ namespace FishingPerfectionHelper
         private Boolean isBusUnlocked = false;
         private ModConfig config;
 
-        //todo new keybind for triggering update of caught fish
-
         private static readonly Dictionary<string, string> knownFishLocations = new()
         {        //fishid, location
                 { "128", "Ocean" }, // Pufferfish
@@ -99,7 +97,6 @@ namespace FishingPerfectionHelper
 
         public override void Entry(IModHelper helper)
         {
-            populateFishDatabase();
             config = helper.ReadConfig<ModConfig>();
             helper.Events.GameLoop.GameLaunched += OnGameLaunched;
             helper.Events.GameLoop.DayStarted += OnDayStarted;
@@ -116,23 +113,18 @@ namespace FishingPerfectionHelper
 
             if (e.Button == config.ViewAvailableFish) 
             {
-                UpdateCatchableFish();
+                UpdateCaughtFish(); //recheck uncaught fish in the db to see if they're caught now
+                UpdateCatchableFish(); //recheck uncaughtfish to find which are currently catchable
                 Game1.exitActiveMenu(); // Ensure no menu is open
                 string message = BuildCatchableFishListForDisplay(catchableFish);
                 Game1.drawLetterMessage(message);
-            }
-
-            if (e.Button == config.RefreshCaughtFish)
-            {
-                populateFishDatabase();
-                UpdateCaughtFish();
-                Game1.drawObjectDialogue("Refreshed your caught fish; re-open Fishing Perfection Helper to see an updated list of needed fish");
             }
         }
 
         private void OnDayStarted(object? sender, DayStartedEventArgs e)
         {
-            UpdateCaughtFish();
+            //need to repopulate on day start to be sure we have this player's fish caught flagged and not a cache from another loaded save
+            populateFishDatabase();
 
             isNightMarketToday = (Game1.currentSeason == "winter" && Game1.dayOfMonth >= 15 && Game1.dayOfMonth <= 17);
             isCommunityCenterComplete = Game1.player.hasCompletedCommunityCenter() ||
@@ -144,7 +136,7 @@ namespace FishingPerfectionHelper
             
             isBusUnlocked = Game1.player.mailReceived.Contains("ccVault") || Game1.player.mailReceived.Contains("jojaVault");
 
-            //debug_printFishCaughtStatusToConsole();
+            debug_printFishCaughtStatusToConsole();
         }
 
         private void OnGameLaunched(object sender, GameLaunchedEventArgs e)
@@ -169,15 +161,6 @@ namespace FishingPerfectionHelper
                 tooltip: () => "Opens the list of fish that can be caught currently. Automatically hides fish that are unavailable due to locked areas or requirements such as fishing level.",
                 fieldId: null
             );
-
-            configMenu.AddKeybind(
-                mod: this.ModManifest,
-                getValue: () => this.config.RefreshCaughtFish,
-                setValue: value => this.config.RefreshCaughtFish = value,
-                name: () => "Refresh caught fish",
-                tooltip: () => "Rechecks fish you have caught, so your available fish list can filter out ones caught today",
-                fieldId: null
-            );
         }
 
         private static List<int> GetTimeRange(int start, int end)
@@ -192,6 +175,8 @@ namespace FishingPerfectionHelper
 
         private void populateFishDatabase()
         {
+            //reset the List<FishInfo> fishDatabase, with which ones are already caught
+            //we redo this at the start of each day
             fishDatabase.Clear();
 
             //get the fish dictionary, keys of their ids are strings
@@ -269,7 +254,7 @@ namespace FishingPerfectionHelper
                         currentFish.Difficulty = Int32.Parse(rawFish.Split('/')[1]);
                     }
 
-                    currentFish.HasBeenCaught = null;
+                    currentFish.HasBeenCaught = false; //initialize it as uncaught
                     fishDatabase.Add(currentFish);
                 }
             }
@@ -277,6 +262,10 @@ namespace FishingPerfectionHelper
 
         private void UpdateCaughtFish()
         {
+            //check which fish not marked as caught in the fishDatabase are actually caught
+            //we do this each time the player opens the view (first time per day it will check all fish,
+            //then subsequent times it will just recheck the ones that weren't caught at the start of
+            //the day (efficiency!))
             unCaughtFish.Clear();
             foreach (var fish in fishDatabase.Where(f => f.HasBeenCaught != true))
             {
@@ -296,11 +285,12 @@ namespace FishingPerfectionHelper
                 // If not caught (or count was 0)
                 unCaughtFish.Add(fish);
             }
-        }//end UpdateCaughtFish
+        }
 
         private void UpdateCatchableFish()
         {
-            var caught = Game1.stats.FishCaught;
+            //check which fish that haven't been caught yet are catchable under current game state
+
             catchableFish.Clear();
 
             foreach (var fish in unCaughtFish)
@@ -315,35 +305,67 @@ namespace FishingPerfectionHelper
 
         public string BuildCatchableFishListForDisplay(List<FishInfo> catchableFish)
         {
-            string message = //line breaks as they display in the 52-character monospace window in-game
-            "These are the fish that you haven't caught before   " +
-            "today that you should be able to catch under the    " +
-            "current season, conditions, and time:               " +
-            "                                                    ";
+            string message = //line breaks as they display in the 52?-character monospace window in-game
+            "These are the fish that you haven't caught yet     " +
+            "that you should be able to catch under the current " +
+            "season, conditions, and time:                      " +
+            "                                                     ";
+
+            int lineCount = 4;
             catchableFish = catchableFish.OrderBy(f => f.Difficulty).ToList();
             foreach (var fish in catchableFish)
             {
-                string weather = fish.Weather;
-                if (weather == "both")
+                //the pagination is weird ok, each page seems to have a different length
+                //available for line 1 so I'm hard-coding those lines at just the right
+                //size with the spaces (idk what i'm doing)
+                switch (lineCount)
                 {
-                    weather = "any";
-                }
+                    case 11:
+                        message += "Page 2...                                      ";
+                        break;
+                    case 22:
+                        message += "Page 3...                                     ";
+                        break;
+                    case 33:
+                        message += "Page 4...                                       ";
+                        break;
+                    case 44:
+                        message += "Page 5...                                        ";
+                        break;
+                    case 55:
+                        message += "Page 6...                                         ";
+                        break;
+                    case 66:
+                        message += "Page 7...                                      ";
+                        break;
+                    case 77: //this is enough for all fish in 1.6
+                        message += "Page 8...                                       ";
+                        break;
+                    default: //not a first line on a page, so just build a fish info line
+                        //limit what we display bc of the ~50 char limit which runs out easily
+                        string rain = "";
+                        if (fish.Weather == "rainy")
+                        {
+                            rain = " - rain";
+                        }
 
-                string thisFish = ($"> {fish.Name} ({fish.Locations}) - {weather} weather");
+                        string thisFish = ($"> {fish.Name} ({fish.Locations}){rain}");
+                        // eg '> Pufferfish (Ocean)' or '> Walleye (Freshwater) - rain'
 
-                //truncate if too long soz
-                if (thisFish.Length > 52)
-                    thisFish = thisFish.Substring(0, 52);
+                        //truncate (sorry) if somehow too long 
+                        if (thisFish.Length > 52)
+                            thisFish = thisFish.Substring(0, 50);
 
-                while (thisFish.Length < 52)
-                {
-                    thisFish += " "; //append spaces until it fills the line lol
-                }
-                
+                        while (thisFish.Length < 52)
+                        {
+                            thisFish += " "; //append spaces until it fills the line lol what could possibly go wrong
+                        }
 
-                message += thisFish;
-
-            }
+                        message += thisFish;
+                        break;
+                } //end switch
+                lineCount++;
+            } //end foreach
 
             return message;
 
@@ -351,7 +373,11 @@ namespace FishingPerfectionHelper
 
         private void debug_printFishCaughtStatusToConsole()
         {
-            Monitor.Log("=== you have caught ===", LogLevel.Info);
+            UpdateCaughtFish();
+            UpdateCatchableFish();
+
+            Monitor.Log("..........................................................", LogLevel.Info);
+            Monitor.Log("============= you have caught =============", LogLevel.Info);
             foreach (var fish in fishDatabase)
             {
                 if (fish.HasBeenCaught == true)
@@ -360,12 +386,13 @@ namespace FishingPerfectionHelper
                     Monitor.Log($"it can be caught at: {fish.Locations} in {fish.Weather} conditions", LogLevel.Info);
                 }
             }
-            Monitor.Log("=== you still need ===", LogLevel.Info);
+            Monitor.Log("============= you still need =============", LogLevel.Info);
             foreach (var fish in unCaughtFish)
             {
                 Monitor.Log(fish.Name, LogLevel.Info);
                 Monitor.Log($"it can be caught at: {fish.Locations} in {fish.Weather} conditions", LogLevel.Info);
             }
+            Monitor.Log("..........................................................", LogLevel.Info);
         }
     }//end Mod
 }//end Namespace
