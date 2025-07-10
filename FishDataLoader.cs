@@ -78,9 +78,13 @@ namespace FishingPerfectionHelper
 
                         //times
                         string TimeString = rawFishArray[5];
-                        int startTime = Int32.Parse(TimeString.Split(' ')[0]); //todo check a fish with multiple windows
-                        int endTime = Int32.Parse(TimeString.Split(' ')[1]);
-                        currentFish.Times = Utilities.GetTimeRange(startTime, endTime);
+                        string[] TimeArray = TimeString.Split(' ');
+                        for (int i = 0; i < TimeArray.Length - 1; i+= 2)
+                        {
+                            int startTime = Int32.Parse(TimeString.Split(' ')[i]); 
+                            int endTime = Int32.Parse(TimeString.Split(' ')[i + 1]);
+                            currentFish.Times.AddRange(Utilities.GetTimeRange(startTime, endTime));
+                        }                        
 
                         //weather
                         currentFish.Weather = rawFishArray[7];
