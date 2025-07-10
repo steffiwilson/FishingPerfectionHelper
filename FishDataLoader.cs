@@ -96,10 +96,16 @@ namespace FishingPerfectionHelper
 
                     currentFish.HasBeenCaught = false; //initialize it as uncaught
 
-                    //fix bug in the Data/Fish record for the Angler saying it's all-season
+                    //fix bugs in the Data/Fish records
                     if (currentFish.Id == 160)
                     {
+                        //angler is fall only
                         currentFish.Seasons = new List<string> { "Fall" };
+                    }
+                    if (currentFish.Id == 699)
+                    {
+                        //tiger trout is fall/winter only
+                        currentFish.Seasons = new List<string> { "Fall", "Winter" };
                     }
 
                     fishDatabase.Add(currentFish);

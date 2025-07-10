@@ -128,9 +128,9 @@ namespace FishingPerfectionHelper
 
         private void OnDayStarted(object? sender, DayStartedEventArgs e)
         {
-            //need to repopulate on day start, because if the player loads a different save
-            //the previous save's database with its markers for caught fish will still be in scope
-            //calling this fresh each day ensures accuracy
+            /*Need to repopulate this on day start, because if the player loads a different save,
+              the previous save's database with its markers for caught fish will still be in scope.
+              Calling this fresh each day ensures accuracy*/
             FishDataLoader.populateFishDatabase(fishDatabase, knownFishLocations);
         }
 
