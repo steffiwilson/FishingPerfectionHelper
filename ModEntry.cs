@@ -48,7 +48,7 @@ namespace FishingPerfectionHelper
                 { "157", "Mines" }, // White Algae
                 { "158", "Mines" }, // Stonefish
                 { "159", "Ocean (Legendary)" }, // Crimsonfish
-                { "160", "River (Legendary)" }, // Angler
+                { "160", "North River (Legendary)" }, // Angler
                 { "161", "Mines" }, // Ice Pip
                 { "162", "Mines" }, // Lava Eel
                 { "163", "Mountain Lake (Legendary)" }, // Legend
@@ -118,10 +118,28 @@ namespace FishingPerfectionHelper
                 {
                     hasCaughtTutorialFish = true;
                 }
-                unCaughtFish = fishDatabase.Where(f => f.HasBeenCaught != true).ToList();
+                unCaughtFish = fishDatabase.Where(f => f.HasBeenCaught == false).ToList();
                 catchableFish = FishDataLoader.GetCurrentlyCatchableFish(unCaughtFish, hasCaughtTutorialFish); 
                 Game1.exitActiveMenu(); // Ensure no menu is open
-                string message = Utilities.BuildCatchableFishListForDisplay(catchableFish);
+
+                string message = "";
+
+                if (unCaughtFish.Count == 0)
+                {
+                    message = "You've caught all the fish!";
+                }
+                else if (unCaughtFish.All(f => f.Locations.Contains("Legendary II")))
+                {
+                    message = "You've caught all the normal fish for fishing completion! You can still catch the Legendary Fish II ones if you wish. Look for the Extended Family Quest!";
+                }
+                else if (catchableFish.Count == 0)
+                {
+                    message = Utilities.BuildMissingFishListForDisplay(unCaughtFish);
+                }
+                else
+                {
+                    message = Utilities.BuildCatchableFishListForDisplay(catchableFish);
+                }                
                 Game1.drawLetterMessage(message);
             }
         }

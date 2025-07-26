@@ -9,8 +9,15 @@ using xTile.Dimensions;
 
 namespace FishingPerfectionHelper
 {
-    public static class FishDataLoader
+    public class FishDataLoader
     {
+        private readonly IMonitor Monitor;
+
+        public FishDataLoader(IMonitor monitor)
+        {
+            this.Monitor = monitor;
+        }
+
         public static void populateFishDatabase(List<Fish> fishDatabase, Dictionary<string, string> knownFishLocations)
         {
             //reset the List<FishInfo> fishDatabase, with which ones are already caught
@@ -31,7 +38,7 @@ namespace FishingPerfectionHelper
                  * 0 - name
                  * 1,2,3,4 - difficulty, movement style, minimum size, maximum size
                  * 5 - begin and end times for availability (end is exclusive, start is inclusive)
-                 * 6 - seasons (space separated string)
+                 * 6 - seasons (space separated string, lowercase)
                  * 7 - weather (will be "sunny" "rainy" or "both")
                  * 8 - purportedly this is the location
                  * 9, 10, 11 - related to the chance to catch it, including cast length
@@ -104,17 +111,36 @@ namespace FishingPerfectionHelper
                     if (currentFish.Id == 160)
                     {
                         //angler is fall only
-                        currentFish.Seasons = new List<string> { "Fall" };
+                        currentFish.Seasons = new List<string> { "fall" };
                     }
                     if (currentFish.Id == 699)
                     {
                         //tiger trout is fall/winter only
-                        currentFish.Seasons = new List<string> { "Fall", "Winter" };
+                        currentFish.Seasons = new List<string> { "fall", "winter" };
+                    }
+                    if (currentFish.Id == 159)
+                    {
+                        //crimsonfish is summer
+                        currentFish.Seasons = new List<string> { "summer" };
                     }
 
                     fishDatabase.Add(currentFish);
                 }
             }
+
+            Fish goby = new Fish();
+            goby.Key = $"(O)Goby";
+            goby.Name = "Goby";
+            goby.Seasons = new List<string> { "spring", "summer", "fall", "winter" };
+            goby.Times = Utilities.GetTimeRange(600, 2600);
+            goby.Weather = "both";
+            goby.Locations = "Waterfalls";
+            goby.MinFishingLevel = 4;//based on needed cast length per the wiki
+            goby.canBeTutorialFish = false; //don't know for sure
+            goby.HasBeenCaught = false; //initializing uncaught
+            goby.Difficulty = 55;
+
+            fishDatabase.Add(goby);
         }
 
         public static List<Fish> GetCurrentlyCatchableFish(List<Fish> unCaughtFish, bool hasCaughtTutorialFish)
