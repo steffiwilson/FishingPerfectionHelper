@@ -69,10 +69,12 @@ namespace FishingPerfectionHelper
 
         public static string BuildMissingFishListForDisplay(List<Fish> missingFish)
         {
+            int countToDisplay = missingFish.Count(f => !f.Locations.Contains("Legendary II"));
+
             // the ^ character creates new lines
             string message =
             "There are no currently catchable fish that you are still missing. Below are listed the " +
-            missingFish.Count + " fish you still need according to season:^^";
+            countToDisplay + " fish you still need according to season:^^";
 
             int lineCount = 4; //number of lines taken by the above message + empty line
             missingFish = missingFish.OrderBy(f => f.Difficulty).ToList();
